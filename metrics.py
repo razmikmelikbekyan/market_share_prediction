@@ -1,18 +1,15 @@
-from typing import List, Tuple, Dict
+from typing import Dict, List, Tuple
 
-import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import seaborn as sns
+from matplotlib import pyplot as plt
 from matplotlib.collections import QuadMesh
 from scipy import stats
-from sklearn.metrics import (roc_curve, auc, confusion_matrix, average_precision_score,
+from sklearn.metrics import (confusion_matrix, roc_curve, auc, average_precision_score,
                              precision_recall_curve, mean_squared_error, explained_variance_score,
                              r2_score)
-from tabulate import tabulate
 
-
-### Classification related metrics ###
 
 def bernoulli_conf_interval(p: float, n: int, confidence: float):
     """
@@ -33,7 +30,7 @@ def bernoulli_conf_interval(p: float, n: int, confidence: float):
     alpha = 1 - confidence  # target error rate
     z = stats.norm.ppf(1 - alpha / 2)  # 1-alpha/2 - quantile of a standard normal distribution
     se = z * np.sqrt(p * (1 - p) / n)  # standard error
-    return (p - se, p + se)
+    return p - se, p + se
 
 
 def confusion_matrix_metrics(y_true: np.ndarray, y_pred: np.ndarray) -> Dict:
@@ -85,14 +82,15 @@ def confusion_matrix_metrics(y_true: np.ndarray, y_pred: np.ndarray) -> Dict:
 
 
 def plot_confusion_matrix(confusion_matrix_metrics: Dict,
-                          labels: List[str],
-                          figsize: Tuple = (10, 10),
-                          fsize: int = 10,
-                          image_path: str = None, ):
+                          label: str = '',
+                          class_labels: List[str] = ('N', 'Y'),
+                          figsize: Tuple = (5, 5),
+                          fsize: int = 12,
+                          image_path: str = None):
     """
     Plots confusion matrix
     :param confusion_matrix_metrics: the output of "confusion_matrix_metrics" function
-    :param labels: list of labels, first should be the name of negative values
+    :param class_labels: list of labels, first should be the name of negative classes
     :param figsize: the tuple, specifying figure size of plot
     :param fsize: font size for plot
     :param image_path: the path were image will be saved
@@ -125,7 +123,7 @@ def plot_confusion_matrix(confusion_matrix_metrics: Dict,
     annot[1, 1] = 'TP={} \n\nTPR={:.2f}% \n\nPPV={:.2f}%'.format(tp, tpr * 100, ppv * 100)
 
     fig, ax = plt.subplots(figsize=figsize)
-    ax = sns.heatmap(pd.DataFrame(cm_norm, index=labels, columns=labels),
+    ax = sns.heatmap(pd.DataFrame(cm_norm, index=class_labels, columns=class_labels),
                      annot=annot,
                      annot_kws={"size": fsize, 'color': 'w', 'fontstyle': 'oblique'},
                      linewidths=0.1,
@@ -148,7 +146,9 @@ def plot_confusion_matrix(confusion_matrix_metrics: Dict,
     ax.set_yticklabels(ax.get_yticklabels(), rotation=25, fontsize=12)
 
     # set labels
-    ax.axes.set_title("Accuracy={:.2f}% \n f_score={:.2f}".format(accuracy * 100, f_score),
+    ax.axes.set_title("Model: {} \n Accuracy={:.2f}%, f_score={:.2f}".format(label,
+                                                                             accuracy * 100,
+                                                                             f_score),
                       fontsize=fsize)
     ax.set_xlabel("Predicted label", fontsize=15)
     ax.set_ylabel("Actual label", fontsize=15)
@@ -203,7 +203,7 @@ def plot_roc_curve(roc_curve_metrics: Dict,
     plt.show()
 
 
-def precision_recall_metrics(y_true: np.ndarray, y_score: np.ndarray, ) -> Dict:
+def precision_recall_metrics(y_true: np.ndarray, y_score: np.ndarray) -> Dict:
     """
     Calculates precision-recall curve related metrics: average_precision_score and
     precision's and recall's for thresholds.
@@ -247,7 +247,6 @@ def plot_precision_recall_curve(precision_recall_metrics: Dict,
     plt.show()
 
 
-### Regression related metrics ###
 def regression_metrics(y_true: np.ndarray, y_pred: np.ndarray) -> Dict:
     """
     Calculates regression metrics: RMSE, R2 and explained variance
@@ -261,74 +260,18 @@ def regression_metrics(y_true: np.ndarray, y_pred: np.ndarray) -> Dict:
     return {'rmse': rmse, 'r_2': r_2, 'explained_variance': explained_variance}
 
 
-def plot_actual_vs_pred(y_true: np.ndarray, y_pred: np.ndarray):
-    """Plots model predictions vs their actual values."""
-    plt.figure(figsize=(10, 10))
-    plt.scatter(y_true, y_pred)
-    plt.title('Actual values vs Predicted values.')
-    plt.ylabel('Predicted', fontsize=12)
-    plt.xlabel('Actual', fontsize=12)
-    plt.show()
-
-
-### All metrics ###
-def calculate_metrics(y_true: np.ndarray, y_pred: np.ndarray, threshold: float) -> Dict:
+def plot_actual_vs_pred(y_true: np.ndarray, y_pred: np.ndarray, label: str = None):
     """
-    Calculates Regression and Classification related all metrics
+    Plots actual vs predicted values scatter plot.
     :param y_true: true value of the data, with shape (n_samples,), continuous array
     :param y_pred: predicted value of the data, with shape (n_samples,), continuous array
-    :param threshold: the threshold for transforming scores to binary arrays
-    :return: dict of metrics
+    :param label: the name of the line
     """
-    y_true_binary = y_true > threshold
-    y_pred_binary = y_pred > threshold
-
-    return {
-        **regression_metrics(y_true, y_pred),
-        **confusion_matrix_metrics(y_true_binary, y_pred_binary),
-        **roc_curve_metrics(y_true_binary, y_pred),
-        **precision_recall_metrics(y_true_binary, y_pred),
-    }
-
-
-def print_metrics(metrics_list: List[Dict], model_names: List[str] = None):
-    """
-    Prints metrics.
-    :param metrics_list: the list of metrics' dicts, each dict is the output of calculate_metrics
-                         function
-    :param model_names: the list of model names
-    """
-    assert len(metrics_list) == len(model_names)
-    metric_names = ('rmse', 'r_2', 'accuracy', 'tpr', 'fpr', 'ppv', 'npv', 'f_score', 'auc', 'ap')
-
-    tabular_format = [[k] + [item[k] for item in metrics_list] for k in metric_names]
-    tabular_format = tabulate(
-        tabular_format,
-        headers=['metric_name'] + model_names,
-        tablefmt="fancy_grid",
-        floatfmt=",.3f")
-    print(tabular_format)
-
-
-def plot_metrics():
-    pass
-
-
-if __name__ == '__main__':
-    threshold = 0.007
-    y_true = np.random.exponential(1 / 100, 50)
-    y_pred = np.random.exponential(1 / 100, 50)
-    metrics_1 = calculate_metrics(y_true, y_pred, threshold)
-
-    threshold = 0.007
-    y_true = np.random.exponential(1 / 100, 50)
-    y_pred = np.random.exponential(1 / 100, 50)
-    metrics_2 = calculate_metrics(y_true, y_pred, threshold)
-
-    print_metrics([metrics_1, metrics_2], ['model a', 'model b'])
-
-    # binary_y_true = y_true > threshold
-    #
-    # plot_confusion_matrix(a, ['N', 'Y'], figsize=(5, 5), fsize=12, image_path='a.png')
-    # plot_roc_curve(b, label='my model', image_path='b.png')
-    # plot_precision_recall_curve(c, label='my model', image_path='c.png')
+    """Plots model predictions vs their actual values."""
+    plt.figure(figsize=(10, 10))
+    plt.scatter(y_true, y_pred, label=label)
+    plt.title('Actual values vs Predicted values.', fontsize=18)
+    plt.ylabel('Predicted', fontsize=14)
+    plt.xlabel('Actual', fontsize=14)
+    plt.legend(fontsize=18)
+    plt.show()
