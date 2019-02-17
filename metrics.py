@@ -65,7 +65,7 @@ def confusion_matrix_metrics(y_true: np.ndarray, y_pred: np.ndarray) -> Dict:
     # npv: probability that the disease is not present when the test is  negative (tn / (tn + fn))
     ppv = tp / (tp + fp)
     npv = tn / (tn + fn)
-    ppv_conf_interval = bernoulli_conf_interval(ppv, tp + fn, 0.95)
+    ppv_conf_interval = bernoulli_conf_interval(ppv, tp + fp, 0.95)
     npv_conf_interval = bernoulli_conf_interval(npv, tn + fn, 0.95)
     metrics.update(
         {'ppv': ppv, 'npv': npv, 'PPV 95% CI': ppv_conf_interval, 'NPV 95% CI': npv_conf_interval})
@@ -192,10 +192,10 @@ def plot_roc_curve(roc_curve_metrics: Dict,
 
     plt.xlim([-0.05, 1.05])
     plt.ylim([-0.05, 1.05])
-    plt.title('ROC curve')
-    plt.xlabel('False Positive Rate')
-    plt.ylabel('True Positive Rate')
-    plt.legend(loc="lower right")
+    plt.title('ROC curve', fontsize=18)
+    plt.xlabel('False Positive Rate',  fontsize=14)
+    plt.ylabel('True Positive Rate',  fontsize=14)
+    plt.legend(loc="lower right",  fontsize=18)
 
     if image_path:
         plt.savefig(image_path)
@@ -203,7 +203,7 @@ def plot_roc_curve(roc_curve_metrics: Dict,
     plt.show()
 
 
-def precision_recall_metrics(y_true: np.ndarray, y_score: np.ndarray) -> Dict:
+def ppv_tpr_metrics(y_true: np.ndarray, y_score: np.ndarray) -> Dict:
     """
     Calculates precision-recall curve related metrics: average_precision_score and
     precision's and recall's for thresholds.
@@ -212,34 +212,35 @@ def precision_recall_metrics(y_true: np.ndarray, y_score: np.ndarray) -> Dict:
                     confidence values, or non-thresholded measure of decisions
     :return:dict of metrics
     """
-    average_precision = average_precision_score(y_true, y_score)
-    precisions, recalls, _ = precision_recall_curve(y_true, y_score)
-    return {'ap': average_precision, 'precisions': precisions, 'recalls': recalls}
+    average_ppv = average_precision_score(y_true, y_score)
+    ppvs, tprs, _ = precision_recall_curve(y_true, y_score)
+    return {'average_ppv': average_ppv, 'precisions': ppvs, 'recalls': tprs}
 
 
-def plot_precision_recall_curve(precision_recall_metrics: Dict,
-                                label: str = None,
-                                image_path: str = None):
+def plot_ppv_tpr_curve(ppv_tpr_metric: Dict,
+                       label: str = None,
+                       image_path: str = None):
     """
     Plots Precision-Recall curve.
-    :param precision_recall_metrics: the output of "precision_recall_metrics" function
+    :param ppv_tpr_metric: the output of "ppv_tpr_metrics" function
     :param label: the name of line
     :param image_path: the path were image will be saved
     """
-    precisions = precision_recall_metrics['precisions']
-    recalls = precision_recall_metrics['recalls']
-    ap = precision_recall_metrics['ap']
+    ppvs = ppv_tpr_metric['precisions']
+    tprs = ppv_tpr_metric['recalls']
+    average_ppv = ppv_tpr_metric['average_ppv']
 
     plt.figure(figsize=(10, 10))
 
-    plt.step(recalls, precisions, color='b', alpha=0.2, where='post', label=label)
-    plt.fill_between(recalls, precisions, step='post', alpha=0.2, color='b')
+    plt.step(tprs, ppvs, color='b', alpha=0.2, where='post', label=label)
+    plt.fill_between(tprs, ppvs, step='post', alpha=0.2, color='b')
 
-    plt.xlabel('Recall')
-    plt.ylabel('Precision')
+    plt.xlabel('TPR', fontsize=14)
+    plt.ylabel('PPV', fontsize=14)
     plt.ylim([0.0, 1.05])
     plt.xlim([0.0, 1.0])
-    plt.title('Precision-Recall curve: AP={0:0.2f}'.format(ap))
+    plt.title('PPV-TPR curve: Average PPV={0:0.2f}'.format(average_ppv), fontsize=14)
+    plt.legend(loc="lower right", fontsize=14)
 
     if image_path:
         plt.savefig(image_path)
@@ -273,5 +274,5 @@ def plot_actual_vs_pred(y_true: np.ndarray, y_pred: np.ndarray, label: str = Non
     plt.title('Actual values vs Predicted values.', fontsize=18)
     plt.ylabel('Predicted', fontsize=14)
     plt.xlabel('Actual', fontsize=14)
-    plt.legend(fontsize=18)
+    plt.legend(loc="lower right", fontsize=18)
     plt.show()

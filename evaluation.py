@@ -6,10 +6,10 @@ from sklearn import clone
 from sklearn.model_selection import KFold
 from tabulate import tabulate
 
-from metrics import (confusion_matrix_metrics, roc_curve_metrics, precision_recall_metrics,
+from metrics import (confusion_matrix_metrics, roc_curve_metrics, ppv_tpr_metrics,
                      regression_metrics, plot_actual_vs_pred, plot_confusion_matrix)
 
-TO_VERBOSE = ('rmse', 'r_2', 'accuracy', 'tpr', 'fpr', 'ppv', 'npv', 'f_score', 'auc', 'ap')
+MAIN_METRICS = ('rmse', 'r_2', 'accuracy', 'tpr', 'fpr', 'ppv', 'npv', 'f_score', 'auc')
 
 
 def calculate_metrics(y_true: np.ndarray, y_pred: np.ndarray, threshold: float) -> Dict:
@@ -27,7 +27,7 @@ def calculate_metrics(y_true: np.ndarray, y_pred: np.ndarray, threshold: float) 
         **regression_metrics(y_true, y_pred),
         **confusion_matrix_metrics(y_true_binary, y_pred_binary),
         **roc_curve_metrics(y_true_binary, y_pred),
-        **precision_recall_metrics(y_true_binary, y_pred),
+        **ppv_tpr_metrics(y_true_binary, y_pred),
     }
 
 
@@ -39,7 +39,7 @@ def print_metrics(models_metrics: Dict[str, Dict]):
     """
     models, metrics = zip(*models_metrics.items())
 
-    tabular_format = [[k] + [item[k] for item in metrics] for k in TO_VERBOSE]
+    tabular_format = [[m] + [item[m] for item in metrics] for m in MAIN_METRICS]
     tabular_format = tabulate(
         tabular_format,
         headers=['metric_name'] + list(models),
@@ -140,83 +140,38 @@ def cv_mean_metrics(folds_metrics: List[Dict]):
     """Calculates model mean metrics based on list of each folds metrics."""
     if not folds_metrics:
         return
-    data = {k: [x[k] for x in folds_metrics] for k in TO_VERBOSE}
+    data = {k: [x[k] for x in folds_metrics] for k in MAIN_METRICS}
     return {k: (np.mean(v), np.std(v)) for k, v in data.items()}
 
 
-def cv_model(model, model_name, predictors, y_true, threshold, n_folds=5, verbose=True):
+def cv_model(model, model_name, predictors, y_true, threshold, n_folds=5):
     """Helper function for doing cross validation and collecting metrics."""
 
     kf = KFold(n_splits=n_folds, shuffle=True, random_state=42)
 
     training_metrics, validation_metrics = [], []
-    for i, (train_ind, valid_ind) in enumerate(kf.split(predictors)):
+    for train_ind, valid_ind in kf.split(predictors):
+        # training model
         model_, _, t_metrics = train_model(clone(model), model_name,
-                                           predictors.iloc[train_ind],
-                                           y_true.iloc[train_ind],
+                                           predictors.iloc[train_ind], y_true.iloc[train_ind],
                                            threshold, plot=False, verbose=False)
+
+        # validating model
         _, _, v_metrics = test_model(model_, model_name,
-                                     predictors.iloc[valid_ind],
-                                     y_true.iloc[valid_ind],
+                                     predictors.iloc[valid_ind], y_true.iloc[valid_ind],
                                      threshold, plot=False, verbose=False)
-
-        tabular_metrics = [[k, t_metrics[k], v_metrics[k]] for k in TO_VERBOSE]
-
-        if verbose:
-            print('\nfold: {}\n'.format(i + 1))
-            print(tabulate(tabular_metrics,
-                           headers=['metric_name', 'training_set', 'validation_set'],
-                           tablefmt="fancy_grid",
-                           floatfmt=",.3f"))
 
         training_metrics.append(t_metrics)
         validation_metrics.append(v_metrics)
 
     mean_t_metrics = cv_mean_metrics(training_metrics)
     mean_v_metrics = cv_mean_metrics(validation_metrics)
-
-    tabular_mean_metrics = [
-        [k, mean_t_metrics[k][0], mean_t_metrics[k][1], mean_v_metrics[k][0], mean_v_metrics[k][1]]
-        for k in mean_t_metrics.keys()]
-
     tabular_mean_metrics = tabulate(
-        tabular_mean_metrics,
+        [[m, *mean_t_metrics[m], *mean_v_metrics[m]] for m in MAIN_METRICS],
         headers=['metric_name', 'train: mean', 'train: std', 'valid: mean', 'valid: std'],
         tablefmt="fancy_grid",
         floatfmt=",.3f")
-    return tabular_mean_metrics, mean_t_metrics, mean_v_metrics
 
-
-if __name__ == '__main__':
-    threshold = 0.007
-    y_true = np.random.exponential(1 / 100, 50)
-    y_pred = np.random.exponential(1 / 100, 50)
-    metrics_1 = calculate_metrics(y_true, y_pred, threshold)
-
-    threshold = 0.007
-    y_true = np.random.exponential(1 / 100, 50)
-    y_pred = np.random.exponential(1 / 100, 50)
-    metrics_2 = calculate_metrics(y_true, y_pred, threshold)
-
-    threshold = 0.007
-    y_true = np.random.exponential(1 / 100, 50)
-    y_pred = np.random.exponential(1 / 100, 50)
-    metrics_3 = calculate_metrics(y_true, y_pred, threshold)
-
-    k = {'a': metrics_1, 'b': metrics_2, 'c': metrics_3}
-
-    print_metrics(k)
-    plot_multiple_roc_curves(k)
-    plot_multiple_precision_recall_curves(k)
-
-    from sklearn.linear_model import LinearRegression
-
-    m = LinearRegression()
-
-    l, p, metr = train_model(m, 'linear', y_pred.reshape(-1, 1), y_true, threshold)
-
-    # binary_y_true = y_true > threshold
-    #
-    # plot_confusion_matrix(a, ['N', 'Y'], figsize=(5, 5), fsize=12, image_path='a.png')
-    # plot_roc_curve(b, label='my model', image_path='b.png')
-    # plot_precision_recall_curve(c, label='my model', image_path='c.png')
+    print('\n{} score:\n'.format(model_name))
+    print(tabular_mean_metrics)
+    return mean_t_metrics, mean_v_metrics
